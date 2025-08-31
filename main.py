@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import random
 
 # --- Helper functions for board and move representation ---
 
@@ -115,7 +116,6 @@ class ChessModel(nn.Module):
     It has two heads: a policy head for move probabilities and a value head for position evaluation.
     """
     def __init__(self):
-        
         super(ChessModel, self).__init__()
 
         # CNN block: input 12 channels (6 pieces x 2 colors), board 8x8
@@ -186,18 +186,15 @@ def self_play_game(model: ChessModel):
         policy_output, value_output = model(x)
 
         legal_moves = list(board.legal_moves)
-        legal_indices = [move_to_index(m) for m in legal_moves]
         
-        # Policy probabilities for all possible moves
-        policy_probs = F.softmax(policy_output[0], dim=0)
-
-        # Filter to only legal moves and find the best one
-        # Use log_softmax for numerical stability and proper probability distribution
-        legal_log_probs = policy_output[0, legal_indices]
-        
-        # Select the best move from the legal options
-        best_index_in_legal_list = torch.argmax(legal_log_probs).item()
-        best_move = legal_moves[best_index_in_legal_list]
+        # Эпсилон-жадный подход: 10% шанс на случайный ход
+        if random.random() < 0.1:
+            best_move = random.choice(legal_moves)
+        else:
+            legal_indices = [move_to_index(m) for m in legal_moves]
+            policy_output_legal = policy_output[0, legal_indices]
+            best_index_in_legal_list = torch.argmax(policy_output_legal).item()
+            best_move = legal_moves[best_index_in_legal_list]
         
         # Find the global index of the best move
         best_move_global_index = move_to_index(best_move)
@@ -263,7 +260,7 @@ if __name__ == '__main__':
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # model.to(device)
 
-    for episode in range(100):  # 100 games
+    for episode in range(10000):  # 100 games
         try:
             states, moves, rewards = self_play_game(model)
             train_on_game(model, states, moves, rewards)
